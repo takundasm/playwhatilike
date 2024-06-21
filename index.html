@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Playlist Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .question {
+            margin-bottom: 20px;
+        }
+        .options button {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<h1>Spotify Playlist Generator</h1>
+<div id="questions">
+    <div class="question" id="question1">
+        <p>1. I feel like...</p>
+        <div class="options">
+            <button onclick="answerQuestion(1, 'dancing')">Dancing</button>
+            <button onclick="answerQuestion(1, 'singing')">Singing</button>
+            <button onclick="answerQuestion(1, 'gyming')">Gyming</button>
+        </div>
+    </div>
+    <div class="question" id="question2" style="display: none;">
+        <p>2. I feel...</p>
+        <div class="options">
+            <button onclick="answerQuestion(2, 'upbeat')">Upbeat</button>
+            <button onclick="answerQuestion(2, 'relaxed')">Relaxed</button>
+            <button onclick="answerQuestion(2, 'energetic')">Energetic</button>
+        </div>
+    </div>
+    <div class="question" id="question3" style="display: none;">
+        <p>3. I want to hear...</p>
+        <div class="options">
+            <button onclick="answerQuestion(3, 'electronic')">Electronic</button>
+            <button onclick="answerQuestion(3, 'hip-hop')">Hip-Hop</button>
+            <button onclick="answerQuestion(3, 'pop')">Pop</button>
+        </div>
+    </div>
+</div>
+<div class="result" id="result" style="display: none;">
+    <p id="resultText"></p>
+    <button onclick="createPlaylist()">Create Playlist</button>
+</div>
+
+<script>
+    const activityToGenres = {
+        'dancing': ['dance-pop', 'electronic', 'hip-hop'],
+        'singing': ['pop', 'rnb'],
+        'gyming': ['electronic', 'hip-hop', 'rock'],
+        'upbeat': ['pop', 'electronic', 'dance-pop'],
+        'relaxed': ['chill', 'acoustic', 'indie'],
+        'energetic': ['hip-hop', 'electronic', 'pop']
+    };
+
+    const answers = [];
+    let seedGenres = [];
+    let accessToken = null;
+
+    function answerQuestion(questionNumber, answer) {
+        answers[questionNumber - 1] = answer;
+
+        document.getElementById(`question${questionNumber}`).style.display = 'none';
+        const nextQuestion = document.getElementById(`question${questionNumber + 1}`);
+        if (nextQuestion) {
+            nextQuestion.style.display = 'block';
+        } else {
+            determineSeedGenres();
+            document.getElementById('result').style.display = 'block';
+        }
+    }
+
+    function determineSeedGenres() {
+        // Example logic to determine seed genres based on user answers
+        const activity = answers[0]; // First answer relates to activity/mood
+
+        // Select seed genres based on activity
+        seedGenres = activityToGenres[activity] || [];
+
+        // Optionally, add more logic for additional answers to refine seed genres further
+    }
+
+    async function createPlaylist() {
+        accessToken = getAccessToken();
+        if (!accessToken) {
+            alert('You need to authorize the app first.');
+            return;
+        }
+
+        try {
+            const user = await fetch('https://api.spotify.com/v1/me', {
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            }).then(res => res.json());
+
+            const playlist = await fetch(`https://api.spotify.com/v1/users/${user.id}/playlists`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `Moodify Playlist for ${answers.join(' and ')} - ${new Date().toLocaleDateString()}`,
+                    public: false
+                })
+            }).then(res => res.json());
+
+            if (seedGenres.length === 0) {
+                alert('No seed genres found based on your answers.');
+                return;
+            }
+
+            const recommendations = await fetch(`https://api.spotify.com/v1/recommendations?seed_genres=${seedGenres.join(',')}&limit=5`, {
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            }).then(res => res.json());
+
+            const trackUris = recommendations.tracks.map(track => track.uri);
+
+            await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uris: trackUris })
+            });
+
+            alert(`Created playlist: ${playlist.name}`);
+        } catch (error) {
+            console.error('Error creating playlist:', error);
+            alert('Error creating playlist. Check console for details.');
+        }
+    }
+
+    function getAccessToken() {
+        const hash = window.location.hash
+            .substring(1)
+            .split('&')
+            .reduce((acc, item) => {
+                if (item) {
+                    const parts = item.split('=');
+                    acc[parts[0]] = decodeURIComponent(parts[1]);
+                }
+                return acc;
+            }, {});
+
+        return hash.access_token;
+    }
+</script>
+
+<a href="https://accounts.spotify.com/authorize?client_id=82743f4726aa489a81ee0d094632cfbb&response_type=token&redirect_uri=http://localhost:8000&scope=user-read-private%20playlist-modify-private">
+    Authorize Spotify
+</a>
+</body>
+</html>
